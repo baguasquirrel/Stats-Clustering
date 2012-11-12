@@ -1,6 +1,7 @@
 module Statistics.Gaussian (pdf, std_pdf, nonnormalized_pdf, nonnormalized_inverse_pdf, erfc, zigTable) where
 
 import qualified Data.Vector as V
+import qualified System.Random as R
 
 -- ^ calculate the gaussian pdf function at some position x
 pdf :: (Floating a)
@@ -29,9 +30,11 @@ nonnormalized_pdf :: (Floating a)
                   -> a
 nonnormalized_pdf x = exp (-0.5 * x * x)
 
+area_of_tail_pdf :: (Floating a) => a -> a
+area_of_tail_pdf x = (sqrt (pi * 0.5)) * (erfc (x * 0.7071067811865475))
 
 nonnormalized_inverse_pdf :: (Floating a) => a -> a
-nonnormalized_inverse_pdf x = (sqrt (pi * 0.5)) * (erfc (x * 0.7071067811865475))
+nonnormalized_inverse_pdf y = sqrt (-2.0 * log y)
 
 
 erfc :: (Floating a) => a -> a
@@ -64,7 +67,7 @@ zigA = 9.91256303526217e-3
 
 zigTable :: (Floating a) => V.Vector (a,a)
 zigTable =
-  (V.fromList . take zigTableSize) zigList
+  (V.fromList $ (take zigTableSize zigList) ++ [(0.0, 1.0)])
   where
     zigList = (initX0, initY0) : (initX1, initY1) : f (initX1, initY1)
     initX0 = zigX0
@@ -78,3 +81,45 @@ zigTable =
         p_c = (x_c, y_c)
         x_c = nonnormalized_inverse_pdf y_p
         y_c = y_p + zigA / x_c
+
+zigTableFloats :: V.Vector (Float,Float)
+zigTableFloats = zigTable
+
+zigRandom table g0 r =
+  undefined
+  where
+    -- choose random layer
+    (l,g1) = R.randomR (0,zigTableSize-1) g0
+    (x_l,y_l) = table V.! l
+    (x_l_plus1,y_l_plus1) = table V.! (l+1)
+
+    -- choose X
+    (u0,g2) = R.randomR (-1,1) g1
+    x = u0 * x_l
+
+    checkXStep =
+      case abs x < x_l_plus1 of
+        True -> (x,g2)
+        False ->
+          case l == 0 of
+            True -> fallbackToTailStep g2
+            False -> checkYStep
+
+    checkYStep =
+      let (u1,g3) = R.randomR (0,1) g2
+          y = y_l + u1 * (y_l_plus1 - y_l)
+      in
+      case y < nonnormalized_pdf x of
+        True -> (x,g3)
+        False -> zigRandom table g3 r
+      
+    fallbackToTailStep g0 =
+      let (u0,g1) = R.randomR (0,1) g0
+          (u1,g2) = R.randomR (0,1) g1
+          x = (-(log u0)) / zigX0
+          y = -(log u1)
+      in
+      case 2 * y > x * x of
+        True -> x + zigX0
+        False -> fallbackToTailStep g2
+
