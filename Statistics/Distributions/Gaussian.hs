@@ -1,5 +1,6 @@
-module Statistics.Gaussian (pdf, std_pdf, nonnormalized_pdf, nonnormalized_inverse_pdf, erfc) where
+module Statistics.Gaussian (pdf, std_pdf, nonnormalized_pdf, nonnormalized_inverse_pdf, erfc, zigTable) where
 
+import qualified Data.Vector as V
 
 -- ^ calculate the gaussian pdf function at some position x
 pdf :: (Floating a)
@@ -29,7 +30,7 @@ nonnormalized_pdf :: (Floating a)
 nonnormalized_pdf x = exp (-0.5 * x * x)
 
 
-nonnormalized_inverse_pdf :: (Floating a)
+nonnormalized_inverse_pdf :: (Floating a) => a -> a
 nonnormalized_inverse_pdf x = (sqrt (pi * 0.5)) * (erfc (x * 0.7071067811865475))
 
 
@@ -54,12 +55,16 @@ erfc x =
 --
 
 zigTableSize = 128
-zigX0 = 3.442619855899;
-zigA = 9.91256303526217e-3;
 
--- zigguratTable :: (Floating a) => V.Vector a
+zigX0 :: (Floating a) => a
+zigX0 = 3.442619855899
+
+zigA :: (Floating a) => a
+zigA = 9.91256303526217e-3
+
+zigTable :: (Floating a) => V.Vector (a,a)
 zigTable =
-  undefined
+  (V.fromList . take zigTableSize) zigList
   where
     zigList = (initX0, initY0) : (initX1, initY1) : f (initX1, initY1)
     initX0 = zigX0
