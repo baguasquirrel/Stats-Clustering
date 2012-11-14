@@ -8,4 +8,4 @@ The k-means library is fairly rudimentary but generalized, with the following fe
 - early stopping.
 - the k-means++ seeding algorithm by Arthur and Vassilvitskii (2007).
 
-There's also some work being done to replace the normaldistribution package with a ziggurat algorithm, and to refactor the RandomGaussian code so that it does not depend on the Vector typeclass. There's also no real reason why the spaceopt algorithm should record the clusters in the accum vector type.
+There's also some work being done to replace the normaldistribution package with a ziggurat algorithm, and to refactor the RandomGaussian code so that it does not depend on the Vector typeclass.
