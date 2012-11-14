@@ -3,7 +3,7 @@ module Statistics.TestKMeans where
 import Statistics.Datasets.SampleVectorDefinitions
 import Statistics.Datasets.Clusters
 import Statistics.Clustering.KMeans.Tools
-import Statistics.Clustering.KMeans.SpaceOpt
+import qualified Statistics.Clustering.KMeans.SpaceOpt as KMeans
 
 import qualified Data.List as L
 
@@ -15,6 +15,9 @@ import Data.Random.Normal
 
 -- from random-shuffle
 import System.Random.Shuffle
+
+-- from lens, provides the TraversableWithIndex class
+import Control.Lens.WithIndex
 
 
 makeTestSet :: IO ([FVec3],Int,[FVec3])
@@ -43,10 +46,11 @@ makeTestSet = do
 testScript :: IO ()
 testScript = do
   (actualCenters, actualNumClusters, shuffledPts) <- makeTestSet
-  let naiveInitialClusters = take actualNumClusters shuffledPts
-      initialClusters = pickInitialCenters actualNumClusters shuffledPts
-
-  let determinedClusters100 = kMeans shuffledPts initialClusters
+  -- let naiveInitialClusters = take actualNumClusters shuffledPts
+      
+  let initialClusters = pickInitialCenters actualNumClusters shuffledPts
+      initialClusters' = fmap toAccum initialClusters
+      determinedClusters100 = KMeans.kMeans shuffledPts initialClusters'
 
   dumpCSV2 (L.sort determinedClusters100) "estimatedCenters.csv"
   dumpCSV2 (L.sort actualCenters) "actualCenters.csv"

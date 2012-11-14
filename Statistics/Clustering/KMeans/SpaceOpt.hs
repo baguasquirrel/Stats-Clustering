@@ -15,19 +15,19 @@ import qualified Data.Traversable as Tv
 -- need to handle edge cases where:
 -- the initialCenters list is zero length
 -- the points list is zero length
-kMeans :: (Tv.Traversable c, Vector v d, Vector acc d_acc, AccumVec v d acc d_acc, Ord d, Ord v, Fractional d, Fractional d_acc)
+kMeans :: (Tv.Traversable c, Vector v d, Vector acc d_acc, AccumVec v d acc d_acc, Ord acc, Ord d_acc, Fractional d, Fractional d_acc)
        => c v
-       -> [v]
-       -> [v]
+       -> [acc]
+       -> [acc]
 kMeans pts initialCenters =
   step 1000 firstStepPts firstStepCenters
   where
 
-    step :: (Vector v d, Vector acc d_acc, Tv.Traversable c, AccumVec v d acc d_acc, Ord v, Ord d, Fractional d, Fractional d_acc)
+    step :: (Tv.Traversable c, Vector v d, Vector acc d_acc, AccumVec v d acc d_acc, Ord acc, Ord d_acc, Fractional d, Fractional d_acc)
          => Int
-         -> c (v,v)
-         -> [v]
-         -> [v]
+         -> c (v,acc)
+         -> [acc]
+         -> [acc]
     step 0 !cs !centers = centers
     step n !cs !centers =
       nextIter shouldContinue
@@ -67,15 +67,13 @@ kMeans pts initialCenters =
 
 
 
-assignPoint :: (Ord d, Vector v d, Vector acc d_acc, AccumVec v d acc d_acc)
-            => [v]
+assignPoint :: (Ord d_acc, Vector v d, Vector acc d_acc, AccumVec v d acc d_acc)
+            => [acc]
             -> v
-            -> (v,v)
+            -> (v,acc)
 assignPoint centers p =
-  (p,c)
+  (p, (fst . bestCenterWithDistance . toAccum) p)
   where
-    (c,_) = bestCenterWithDistance p
-
     bestCenterWithDistance pt =
       (c,d)
       where
@@ -86,45 +84,46 @@ assignPoint centers p =
     distances pt = fmap (\p -> euclideanDistance p pt) centers
 
 
-recomputeCenters :: (Fl.Foldable t, AccumVec v d acc d_acc, Ord v, Fractional d_acc)
-                 => [v]
-                 -> t (v, v)
-                 -> [(v,d)]
+recomputeCenters :: (Fl.Foldable t, AccumVec v d acc d_acc, Ord acc, Fractional d_acc)
+                 => [acc]
+                 -> t (v,acc)
+                 -> [(acc,d_acc)]
 recomputeCenters centers pts =
   (calculateNewCentersFromAccs . (vectorSumAccsForCenters centers)) pts
   where
 
-    calculateNewCentersFromAccs :: (Vector v d, Vector acc d_acc, Ord v, AccumVec v d acc d_acc, Fractional d_acc)
-                                => M.Map v (acc, Int, d_acc)
-                                -> [(v,d)]
+    calculateNewCentersFromAccs :: (Vector acc d_acc, Ord acc, Fractional d_acc)
+                                => M.Map acc (acc, Int, d_acc)
+                                -> [(acc,d_acc)]
     calculateNewCentersFromAccs = reduceAccs . M.toList
       where
         reduceAccs = fmap reduceAccToCenter
         reduceAccToCenter = normalizeVectorSum . getVectorSums
-        normalizeVectorSum (v_acc, n, d_acc) = (toVector $ divideByIntegral v_acc n, toVectorD $ d_acc / fromIntegral n)
+        normalizeVectorSum (v_acc, n, d_acc) = (divideByIntegral v_acc n, d_acc / fromIntegral n)
         getVectorSums = snd
 
-    vectorSumAccsForCenters :: (Fl.Foldable f, Vector v d, Vector acc d_acc, Ord v, AccumVec v d acc d_acc, Fractional d_acc)
-                            => [v]
-                            -> f (v, v)
-                            -> M.Map v (acc, Int, d_acc)
+    vectorSumAccsForCenters :: (Fl.Foldable f, Vector v d, Vector acc d_acc, Ord acc, AccumVec v d acc d_acc, Fractional d_acc)
+                            => [acc]
+                            -> f (v, acc)
+                            -> M.Map acc (acc, Int, d_acc)
     vectorSumAccsForCenters centers pts =
       Fl.foldl' updateCenter initAccs pts
       where
         updateCenter !accs (p,c) =
-          M.adjust (helper p) c accs
+          M.adjust (helper p') c accs
           where
-            helper p !(acc, n, d_acc) = (addVectors (toAccum p) acc, n+1, (toAccumD d) + d_acc)
-            d = euclideanDistance p c
+            helper p' !(acc, n, d_acc) = (addVectors p' acc, n+1, d + d_acc)
+            d = euclideanDistance p' c
+            p' = toAccum p
 
         initAccs = (M.fromList . fmap initSums) centers
           where
             initSums c = (c, (zeroVector,0,0))
 
 
-checkEarlyTermination :: (Vector v d, Vector acc d_acc, AccumVec v d acc d_acc, Tv.Traversable c, Ord d, Ord v, Fractional d)
-                      => c (v, v, v)   -- ^ (the point, its cluster, its previous cluster)
-                      -> [(v,d,d)]     -- ^ (center, average distance from center to its points, old average distance from previous iteration)
+checkEarlyTermination :: (Vector v d, Vector acc d_acc, AccumVec v d acc d_acc, Tv.Traversable c, Ord acc, Ord d_acc, Fractional d_acc)
+                      => c (v, acc, acc)  -- ^ (the point, its cluster, its previous cluster)
+                      -> [(acc, d_acc, d_acc)]        -- ^ (center, average distance from center to its points, old average distance from previous iteration)
                       -> Bool
 checkEarlyTermination cs centers =
   (clustersNotSignificantlyMoving && clustersNotSignificantlyReassigned)
@@ -153,16 +152,16 @@ checkEarlyTermination cs centers =
           (abs (avgDist - oldAvgDist)) / oldAvgDist
 
 
-assignPointForCheck :: (Ord d, Vector v d)
-                    => [v]
-                    -> (v,v)
-                    -> (v,v,v)
+assignPointForCheck :: (Ord d_acc, Vector v d, Vector acc d_acc, AccumVec v d acc d_acc)
+                    => [acc]
+                    -> (v,acc)
+                    -> (v,acc,acc)
 assignPointForCheck centers (p,c_old) =
   (p,c,c_old)
   where
     -- d_old = euclideanDistance p c_old
-
-    (c,d) = bestCenterWithDistance p
+    p' = toAccum p
+    (c,d) = bestCenterWithDistance p'
 
     bestCenterWithDistance pt =
       (c,d)
@@ -174,16 +173,16 @@ assignPointForCheck centers (p,c_old) =
     distances pt = fmap (\c -> euclideanDistance c pt) centers
 
 
-recomputeCentersForCheck :: (Vector v d, Vector acc d_acc, AccumVec v d acc d_acc, Ord v, Fractional d, Fl.Foldable f, Num d_acc, Fractional d_acc)
-                         => [v]
-                         -> f (v, v, v)
-                         -> [(v,d,d)]
+recomputeCentersForCheck :: (Vector v d, Vector acc d_acc, AccumVec v d acc d_acc, Ord acc, Fractional d, Fl.Foldable f, Num d_acc, Fractional d_acc)
+                         => [acc]                -- ^ centers
+                         -> f (v, acc, acc)      -- ^ (point, assiged center, old assigned center)
+                         -> [(acc,d_acc,d_acc)]  -- ^ (center, average distance to points assigned to this center, old average distance )
 recomputeCentersForCheck centers pts =
   (calculateNewCentersFromAccs . (vectorSumAccsForCenters centers)) pts
   where
-    calculateNewCentersFromAccs :: (Vector v d, Vector acc d_acc, AccumVec v d acc d_acc, Ord v, Fractional d_acc)
-                                => M.Map v (acc, Int, d_acc, d_acc)
-                                -> [(v, d, d)]
+    calculateNewCentersFromAccs :: (Vector acc d_acc, Ord acc, Fractional d_acc)
+                                => M.Map acc (acc, Int, d_acc, d_acc)
+                                -> [(acc, d_acc, d_acc)]
     calculateNewCentersFromAccs = reduceAccs . M.toList
       where
         reduceAccs = fmap reduceAccToCenter
@@ -193,30 +192,31 @@ recomputeCentersForCheck centers pts =
         normalizeSums (v_acc, n, d_acc, d_old_acc) =
           (center,avgDist,oldAvgDist)
           where
-            center = toVector $ divideByIntegral v_acc n
-            avgDist = toVectorD (d_acc / (fromIntegral n))
-            oldAvgDist = toVectorD (d_old_acc / (fromIntegral n))
+            center = divideByIntegral v_acc n
+            avgDist = d_acc / (fromIntegral n)
+            oldAvgDist = d_old_acc / (fromIntegral n)
 
-    vectorSumAccsForCenters :: (Fl.Foldable f, Vector v d, Vector acc d_acc, AccumVec v d acc d_acc, Ord v, Num d_acc)
-                            => [v]
-                            -> f (v, v, v)
-                            -> M.Map v (acc, Int, d_acc, d_acc)
+    vectorSumAccsForCenters :: (Fl.Foldable f, Vector v d, Vector acc d_acc, AccumVec v d acc d_acc, Ord acc, Num d_acc)
+                            => [acc]
+                            -> f (v, acc, acc)
+                            -> M.Map acc (acc, Int, d_acc, d_acc)
     vectorSumAccsForCenters centers pts =
       Fl.foldl' updateCenter initAccs pts
       where
         updateCenter accs (v, c, c_old) =
-          M.adjust (helper v) c accs
+          M.adjust (helper v') c accs
           where
-            d = euclideanDistance v c
-            d_old = euclideanDistance v c_old
+            v' = toAccum v
+            d = euclideanDistance v' c
+            d_old = euclideanDistance v' c_old
 
             helper v (v_acc, n, d_acc, d_old_acc) =
               (v_acc', n', d_acc', d_old_acc')
               where
-                v_acc' = addVectors (toAccum v) v_acc
+                v_acc' = addVectors v v_acc
                 n'     = n+1
-                d_acc'     = (toAccumD d) + d_acc
-                d_old_acc' = (toAccumD d_old) + d_old_acc
+                d_acc'     = d + d_acc
+                d_old_acc' = d_old + d_old_acc
 
         initAccs = (M.fromList . fmap initSums) centers
           where
@@ -225,10 +225,10 @@ recomputeCentersForCheck centers pts =
 
 
 
-statsForResults :: (Vector v d, Vector acc d_acc, AccumVec v d acc d_acc, Tv.Traversable c, Ord d, Ord v, Ord d_acc, Fractional d, Fractional d_acc)
+statsForResults :: (Vector v d_v, Vector acc d_acc, AccumVec v d acc d_acc, Tv.Traversable c, Ord d, Ord acc, Ord d_acc, Fractional d, Fractional d_acc)
                 => c v   -- ^ (the point, its cluster, its previous cluster, its distance to its cluster, its previous distance to its cluster)
-                -> [v]   -- ^ (center, average distance from center to its points, old average distance from previous iteration)
-                -> Maybe ((d,d,d,d), (d,d,d))
+                -> [acc]   -- ^ (center, average distance from center to its points, old average distance from previous iteration)
+                -> Maybe ((d_acc,d_acc,d_acc,d_acc), (d_acc,d_acc,d_acc))
 statsForResults cs centers =
   do  -- compute point stats
       let cs' = fmap (assignPoint centers) cs
@@ -237,18 +237,18 @@ statsForResults cs centers =
             Fl.foldl' tallyCluster (0,0,Nothing) cs'
             where
               tallyCluster (totalCount, distTotalAcc, Just (distMin, distMax)) (p,c) =
-                (totalCount + 1, distTotalAcc + toAccumD d, Just (min distMin d, max distMax d))
+                (totalCount + 1, distTotalAcc + d, Just (min distMin d, max distMax d))
                 where
-                  d = euclideanDistance p c
+                  d = euclideanDistance (toAccum p) c
 
               tallyCluster (totalCount, distTotalAcc, Nothing) (p,c) =
-                (totalCount + 1, distTotalAcc + toAccumD d, Just (d,d))
+                (totalCount + 1, distTotalAcc + d, Just (d,d))
                 where
-                  d = euclideanDistance p c
+                  d = euclideanDistance (toAccum p) c
 
       (pointDistMin, pointDistMax) <- minmax
 
-      let pointDistMean = toVectorD (distTotalAcc / fromIntegral totalCount)
+      let pointDistMean = distTotalAcc / fromIntegral totalCount
 
       -- compute center stats
       let centersWithDistances = recomputeCenters centers cs'
@@ -264,13 +264,11 @@ statsForResults cs centers =
       centerAvgDistMin <- firstToMaybe centersDistances
       centerAvgDistMax <- lastToMaybe centersDistances
 
-      let centerAvgDistMean = toVectorD $ (L.sum $ fmap toAccumD centersDistances) / (fromIntegral numCenters)
+      let centerAvgDistMean = (L.sum centersDistances) / (fromIntegral numCenters)
           centerAvgDistMedian = centersDistances L.!! (numCenters `div` 2)
           numCenters = length centersDistances
 
       return ((centerAvgDistMin, centerAvgDistMean, centerAvgDistMedian, centerAvgDistMax), (pointDistMin, pointDistMean, pointDistMax))
-
-
 
 
 

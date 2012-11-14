@@ -5,7 +5,7 @@
 module Statistics.Clustering.KMeans.Generic (kMeans, statsForResults) where
 
 import Statistics.Datasets.Clusters
-import qualified Data.Statistics.Clustering.KMeans.SpaceOpt as SO
+import qualified Statistics.Clustering.KMeans.SpaceOpt as SO
 
 import qualified Data.List as L
 import qualified Data.Map as M
@@ -17,8 +17,6 @@ import qualified Data.Traversable as Tv
 
 instance (Vector v d) => AccumVec v d v d where
   toAccum = id
-  toVector = id
-  toVectorD = id
   toAccumD = id
 
 

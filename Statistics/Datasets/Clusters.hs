@@ -43,11 +43,9 @@ class Vector ptTy distTy | ptTy -> distTy where
 
 
 
-class (Vector v d, Vector acc d_acc) => AccumVec v d acc d_acc | v -> acc, acc -> v, v -> d, d -> v, v -> d_acc, d -> d_acc where
+class (Vector v d, Vector acc d_acc) => AccumVec v d acc d_acc | v -> acc, v -> d, d -> d_acc where
   toAccum :: v -> acc
-  toVector :: acc -> v
   toAccumD :: d -> d_acc
-  toVectorD :: d_acc -> d
 
 
 

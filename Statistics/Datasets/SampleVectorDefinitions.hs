@@ -117,9 +117,7 @@ instance Random DVec3 where
 
 instance AccumVec FVec3 Float DVec3 Double where
   toAccum (FVec3 x y z) = DVec3 (float2Double x) (float2Double y) (float2Double z)
-  toVector (DVec3 x y z) = FVec3 (double2Float x) (double2Float y) (double2Float z)
   toAccumD = float2Double
-  toVectorD = double2Float
 
 
 instance CSV_Output FVec3 where
