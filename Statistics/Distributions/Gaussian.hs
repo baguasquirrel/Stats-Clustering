@@ -97,6 +97,7 @@ zigRandom table g0 r =
     (u0,g2) = R.randomR (-1,1) g1
     x = u0 * x_l
 
+    -- does x fall inside the rectangle?
     checkXStep =
       case abs x < x_l_plus1 of
         True -> (x,g2)
@@ -105,6 +106,8 @@ zigRandom table g0 r =
             True -> fallbackToTailStep g2
             False -> checkYStep
 
+    -- x did not fall outside the rectangle, and it was
+    -- not the bottom layer.
     checkYStep =
       let (u1,g3) = R.randomR (0,1) g2
           y = y_l + u1 * (y_l_plus1 - y_l)
@@ -113,6 +116,8 @@ zigRandom table g0 r =
         True -> (x,g3)
         False -> zigRandom table g3 r
       
+    -- x did not fall outside the rectangle, and we are
+    -- in the bottom layer, i.e. the tail
     fallbackToTailStep g0 =
       let (u0,g1) = R.randomR (0,1) g0
           (u1,g2) = R.randomR (0,1) g1
@@ -120,6 +125,6 @@ zigRandom table g0 r =
           y = -(log u1)
       in
       case 2 * y > x * x of
-        True -> x + zigX0
+        True -> (x + zigX0, g2)
         False -> fallbackToTailStep g2
 
