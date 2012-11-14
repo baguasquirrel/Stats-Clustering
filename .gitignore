@@ -1,4 +1,6 @@
 dist
 .git
-.hi
-.o
+*.hi
+*.o
+*.csv
+
