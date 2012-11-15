@@ -8,4 +8,4 @@ The k-means library is fairly rudimentary but generalized, with the following fe
 - early stopping.
 - the k-means++ seeding algorithm by Arthur and Vassilvitskii (2007).
 
-There's also some work being done to replace the normaldistribution package with a ziggurat algorithm, and to refactor the RandomGaussian code so that it does not depend on the Vector typeclass.
+There's also some work being done to replace the normaldistribution package with a ziggurat algorithm, and to refactor the RandomGaussian code so that it does not depend on the Vector typeclass. The ziggurat algorithm itself probably needs to be moved out so we can use it to also generate randoms across any arbitrary distribution that is monotonically decreasing.

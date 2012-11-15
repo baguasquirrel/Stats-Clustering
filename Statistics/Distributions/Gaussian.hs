@@ -1,7 +1,13 @@
-module Statistics.Gaussian (pdf, std_pdf, nonnormalized_pdf, nonnormalized_inverse_pdf, erfc, zigTable) where
+{-# LANGUAGE FunctionalDependencies #-}
+
+module Statistics.Gaussian (pdf, std_pdf, nonnormalized_pdf, nonnormalized_inverse_pdf, erfc, zigTable, ziggurat, RandomGaussian(..), histogram) where
 
 import qualified Data.Vector as V
 import qualified System.Random as R
+import qualified Data.Foldable as Fl
+import qualified Data.IntMap as IM
+
+
 
 -- ^ calculate the gaussian pdf function at some position x
 pdf :: (Floating a)
@@ -85,8 +91,15 @@ zigTable =
 zigTableFloats :: V.Vector (Float,Float)
 zigTableFloats = zigTable
 
-zigRandom table g0 r =
-  undefined
+zigTableDoubles :: V.Vector (Double,Double)
+zigTableDoubles = zigTable
+
+ziggurat :: (Floating p, Ord p, R.Random p, R.RandomGen g)
+         => V.Vector (p,p)
+         -> g
+         -> (p,g)
+ziggurat table g0 =
+  checkXStep
   where
     -- choose random layer
     (l,g1) = R.randomR (0,zigTableSize-1) g0
@@ -114,7 +127,7 @@ zigRandom table g0 r =
       in
       case y < nonnormalized_pdf x of
         True -> (x,g3)
-        False -> zigRandom table g3 r
+        False -> ziggurat table g3
       
     -- x did not fall outside the rectangle, and we are
     -- in the bottom layer, i.e. the tail
@@ -128,3 +141,70 @@ zigRandom table g0 r =
         True -> (x + zigX0, g2)
         False -> fallbackToTailStep g2
 
+
+histogram :: (Fl.Foldable f, RealFrac a)
+          => Int    -- ^ num buckets, must be >= 3
+          -> (a,a)  -- ^ range, (lo,hi)
+          -> f a    -- ^ the samples
+          -> [Int]
+histogram nbuckets (lo,hi) samples = 
+  fmap snd $ IM.toAscList $ Fl.foldl' tallySample initCounts samples
+  where
+    initCounts = IM.fromList $ take nbuckets $ zip [0,1..] (repeat 0)
+
+    tallySample counts x =
+      IM.adjust (\c -> c+1) k counts
+      where
+        k = sampleToBucket x
+
+    sampleToBucket x =
+      case x < lo of
+        True -> 0
+        False ->
+          case x > hi of
+            True -> nbuckets - 1
+            False -> floor ((x - lo) / bucketWidth) + 1
+
+    bucketWidth = intervalWidth / fromIntegral nbuckets'
+    intervalWidth = hi - lo
+    nbuckets' = nbuckets - 2
+
+{- a type p in which we may produce random gaussian values.
+ - a type v with which we represent variance or covariances
+ - for a value in p
+ -
+ - minimum required definition: normal, normalD
+ -}
+class RandomGaussian p v | p -> v where
+  normal :: (R.RandomGen g) => g -> (p, g)
+  normalD :: (R.RandomGen g) => (p,v) -> g -> (p,g)
+
+  normals :: (R.RandomGen g) => g -> [p]
+  normals g = (\(x,g') -> x : normals g') (normal g)
+
+
+  normalDs :: (R.RandomGen g) => (p,v) -> g -> [p]
+  normalDs vd g = (\(x,g') -> x : normalDs vd g') (normalD vd g)
+
+  normalDgs :: (R.RandomGen g) => (p,v) -> g -> [(p,g)]
+  normalDgs vd g = (\(x,g') -> (x,g') : normalDgs vd g') (normalD vd g)
+
+
+instance RandomGaussian Float Float where
+  normal g = ziggurat zigTableFloats g
+
+  normalD (m,v) g =
+    (p', g')
+    where
+      p' = m + p * v
+      (p,g') = ziggurat zigTableFloats g
+
+-- identical to the float case
+instance RandomGaussian Double Double where
+  normal g = ziggurat zigTableDoubles g
+
+  normalD (m,v) g =
+    (p', g')
+    where
+      p' = m + p * v
+      (p,g') = ziggurat zigTableDoubles g
