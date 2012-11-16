@@ -99,7 +99,7 @@ recomputeCenters centers pts =
       where
         reduceAccs = fmap reduceAccToCenter
         reduceAccToCenter = normalizeVectorSum . getVectorSums
-        normalizeVectorSum (v_acc, n, d_acc) = (divideByIntegral v_acc n, d_acc / fromIntegral n)
+        normalizeVectorSum (v_acc, n, d_acc) = (scale (1 / fromIntegral n) v_acc, d_acc / fromIntegral n)
         getVectorSums = snd
 
     vectorSumAccsForCenters :: (Fl.Foldable f, Vector v d, Vector acc d_acc, Ord acc, AccumVec v d acc d_acc, Fractional d_acc)
@@ -173,7 +173,7 @@ assignPointForCheck centers (p,c_old) =
     distances pt = fmap (\c -> euclideanDistance c pt) centers
 
 
-recomputeCentersForCheck :: (Vector v d, Vector acc d_acc, AccumVec v d acc d_acc, Ord acc, Fractional d, Fl.Foldable f, Num d_acc, Fractional d_acc)
+recomputeCentersForCheck :: (Vector v d, Vector acc d_acc, AccumVec v d acc d_acc, Ord acc, Fl.Foldable f, Num d_acc, Fractional d_acc)
                          => [acc]                -- ^ centers
                          -> f (v, acc, acc)      -- ^ (point, assiged center, old assigned center)
                          -> [(acc,d_acc,d_acc)]  -- ^ (center, average distance to points assigned to this center, old average distance )
@@ -192,7 +192,7 @@ recomputeCentersForCheck centers pts =
         normalizeSums (v_acc, n, d_acc, d_old_acc) =
           (center,avgDist,oldAvgDist)
           where
-            center = divideByIntegral v_acc n
+            center = scale (1 / fromIntegral n) v_acc
             avgDist = d_acc / (fromIntegral n)
             oldAvgDist = d_old_acc / (fromIntegral n)
 
@@ -225,7 +225,7 @@ recomputeCentersForCheck centers pts =
 
 
 
-statsForResults :: (Vector v d_v, Vector acc d_acc, AccumVec v d acc d_acc, Tv.Traversable c, Ord d, Ord acc, Ord d_acc, Fractional d, Fractional d_acc)
+statsForResults :: (Vector v d_v, Vector acc d_acc, AccumVec v d acc d_acc, Tv.Traversable c, Ord d, Ord acc, Ord d_acc, Fractional d_acc)
                 => c v   -- ^ (the point, its cluster, its previous cluster, its distance to its cluster, its previous distance to its cluster)
                 -> [acc]   -- ^ (center, average distance from center to its points, old average distance from previous iteration)
                 -> Maybe ((d_acc,d_acc,d_acc,d_acc), (d_acc,d_acc,d_acc))

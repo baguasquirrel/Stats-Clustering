@@ -6,7 +6,6 @@ module Statistics.Datasets.Clusters
   , CSV_Output(..)
   , dumpCSV
   , dumpCSV2
-  , RandomGaussian(..)
   , clusters
   , clusters'
   ) where
@@ -15,6 +14,8 @@ import System.Random
 import qualified Data.List as L
 import qualified Data.Traversable as Tv
 import qualified Data.Vector as V
+
+import Statistics.Distributions.Gaussian
 
 import System.IO
 
@@ -29,12 +30,7 @@ class Vector ptTy distTy | ptTy -> distTy where
   norm :: ptTy -> distTy
   norm2 :: ptTy -> distTy
 
-  scale :: ptTy -> distTy -> ptTy
-
-  -- useful for determining the centroid of a list of points.
-  -- you accumulate the sum of the points, and then divide by
-  -- the number of points
-  divideByIntegral :: (Integral a) => ptTy -> a -> ptTy
+  scale :: distTy -> ptTy -> ptTy
 
   unitVector :: ptTy
   zeroVector :: ptTy
@@ -74,6 +70,7 @@ randomRgs bounds g =
   (\(v,g') -> (v,g') : randomRgs bounds g') (randomR bounds g)
 
 
+{-
 class RandomGaussian v where
   normal :: (RandomGen g) => g -> (v, g)
 
@@ -92,13 +89,13 @@ class RandomGaussian v where
 
   normalDgs :: (RandomGen g, Vector v d) => (v,d) -> g -> [(v,g)]
   normalDgs vd g = (\(x,g') -> (x,g') : normalDgs vd g') (normalD vd g)
+-}
 
 
 
 
 
-
-clusters :: (RandomGen g, Vector v d, Random v, RandomGaussian v, Num d, Ord d)
+clusters :: (RandomGen g, Vector v d, Random v, UniformGaussianValues v d, Num d, Ord d)
          => (v,v)  -- ^ the (lower,upper) corners of the bounding box where we want our clusters
          -> d      -- ^ the standard deviation of our clusters
          -> d      -- ^ padding space between clusters
@@ -109,24 +106,23 @@ clusters :: (RandomGen g, Vector v d, Random v, RandomGaussian v, Num d, Ord d)
          -> ([v], [[v]])  -- ^ (the cluster centers, the lists of points, grouped by cluster)
 
 clusters bounds stddev padding nclusters pointsPerCluster g =
-  (cs, clusters' stddev padding pointsPerCluster cs g')
+  (cs, clusters' stddev pointsPerCluster cs g')
   where
-    (cs,g') = createClusterCenters bounds stddev padding nclusters g
+    (cs,g') = createClusterCenters bounds padding nclusters g
 
 
 
 
 
-clusters' :: (RandomGen g, Vector v d, Random v, RandomGaussian v, Num d, Ord d)
+clusters' :: (RandomGen g, Vector v d, Random v, UniformGaussianValues v d, Num d, Ord d)
           => d      -- ^ the standard deviation of our clusters
-          -> d      -- ^ padding space between clusters
           -> Int    -- ^ number of clusters we desire. the actual number of clusters may be smaller, but always greater than zero
           -> [v]    -- ^ the cluster centers
           -> g      -- ^ our random source
 
           -> [[v]]  -- ^ the lists of points, grouped by cluster
 
-clusters' stddev padding pointsPerCluster cs g =
+clusters' stddev pointsPerCluster cs g =
   map fst $ generateClustersFromCenters g cs
   where
     generateClustersFromCenters g [] = []
@@ -143,12 +139,11 @@ clusters' stddev padding pointsPerCluster cs g =
 
 createClusterCenters :: (RandomGen g, Vector v d, Random v, Num d, Ord d)
                      => (v,v) -- ^ bounds
-                     -> d     -- ^ std dev
                      -> d     -- ^ padding
                      -> Int   -- ^ number of clusters
                      -> g     -- ^ random gen
                      -> ([v],g)
-createClusterCenters bounds stddev padding nclusters g =
+createClusterCenters bounds padding nclusters g =
   (map fst ps, snd $ last ps')
     where
       -- ps = filter (\currPt -> (not $ any (pointIsClose currPt) us)) us
@@ -157,8 +152,7 @@ createClusterCenters bounds stddev padding nclusters g =
       ps' = take nclusters $ randomRgs bounds g
 
       pointIsClose x y =
-        euclideanDistance x y < minDistance
+        euclideanDistance x y < padding
 
-      minDistance = (stddev * 3) + padding
 
 

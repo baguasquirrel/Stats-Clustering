@@ -1,6 +1,16 @@
 {-# LANGUAGE FunctionalDependencies #-}
 
-module Statistics.Gaussian (pdf, std_pdf, nonnormalized_pdf, nonnormalized_inverse_pdf, erfc, zigTable, ziggurat, RandomGaussian(..), histogram) where
+module Statistics.Distributions.Gaussian
+  ( pdf
+  , std_pdf
+  , nonnormalized_pdf
+  , nonnormalized_inverse_pdf
+  , erfc
+  , zigTable
+  , ziggurat
+  , UniformGaussianValues(..)
+  , histogram
+  ) where
 
 import qualified Data.Vector as V
 import qualified System.Random as R
@@ -170,12 +180,16 @@ histogram nbuckets (lo,hi) samples =
     nbuckets' = nbuckets - 2
 
 {- a type p in which we may produce random gaussian values.
- - a type v with which we represent variance or covariances
- - for a value in p
+ - a type v with which we represent variance for a random
+ - variable in p
+ -
+ - This class is meant to represent uniform gaussian values,
+ - which is to say that if we have an n-dimensional value,
+ - each of the n variables is independent of each other.
  -
  - minimum required definition: normal, normalD
  -}
-class RandomGaussian p v | p -> v where
+class UniformGaussianValues p v | p -> v where
   normal :: (R.RandomGen g) => g -> (p, g)
   normalD :: (R.RandomGen g) => (p,v) -> g -> (p,g)
 
@@ -190,7 +204,7 @@ class RandomGaussian p v | p -> v where
   normalDgs vd g = (\(x,g') -> (x,g') : normalDgs vd g') (normalD vd g)
 
 
-instance RandomGaussian Float Float where
+instance UniformGaussianValues Float Float where
   normal g = ziggurat zigTableFloats g
 
   normalD (m,v) g =
@@ -200,7 +214,7 @@ instance RandomGaussian Float Float where
       (p,g') = ziggurat zigTableFloats g
 
 -- identical to the float case
-instance RandomGaussian Double Double where
+instance UniformGaussianValues Double Double where
   normal g = ziggurat zigTableDoubles g
 
   normalD (m,v) g =

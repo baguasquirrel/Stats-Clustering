@@ -7,7 +7,8 @@ import GHC.Float
 import System.Random
 
 -- from the package normaldistribution
-import qualified Data.Random.Normal as N
+--import qualified Data.Random.Normal as N
+import Statistics.Distributions.Gaussian
 
 
 data FVec3 =
@@ -19,13 +20,19 @@ data DVec3 =
   deriving (Eq, Show, Ord)
 
 
-instance RandomGaussian FVec3 where
+instance UniformGaussianValues FVec3 Float where
   normal g0 =
     (FVec3 x y z, g3)
     where
-      (x,g1) = N.normal g0
-      (y,g2) = N.normal g1
-      (z,g3) = N.normal g2
+      (x,g1) = normal g0
+      (y,g2) = normal g1
+      (z,g3) = normal g2
+
+  normalD (p,v) g0 =
+    (x',g1)
+    where
+      x' = addVectors p $ scale v x
+      (x,g1) = normal g0
 
 instance Random FVec3 where
   randomR (FVec3 lx ly lz, FVec3 hx hy hz) g0 =
@@ -62,13 +69,9 @@ instance Vector FVec3 Float where
   unitVector = FVec3 1 1 1
   zeroVector = FVec3 0 0 0
 
-  scale (FVec3 x y z) c =
+  scale c (FVec3 x y z) =
     FVec3 (c * x) (c * y) (c * z)
 
-  divideByIntegral (FVec3 x y z) c = 
-    FVec3 (x / c') (y / c') (z / c')
-    where
-      c' = fromIntegral c
 
 
 instance Vector DVec3 Double where
@@ -90,13 +93,9 @@ instance Vector DVec3 Double where
   unitVector = DVec3 1 1 1
   zeroVector = DVec3 0 0 0
 
-  scale (DVec3 x y z) c =
+  scale c (DVec3 x y z) =
     DVec3 (c * x) (c * y) (c * z)
 
-  divideByIntegral (DVec3 x y z) c = 
-    DVec3 (x / c') (y / c') (z / c')
-    where
-      c' = fromIntegral c
 
 
 instance Random DVec3 where
