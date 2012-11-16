@@ -1,5 +1,7 @@
 module Statistics.TestKMeans where
 
+import Statistics.Types.Debug
+import Statistics.Types.PointVec
 import Statistics.Datasets.SampleVectorDefinitions
 import Statistics.Datasets.Clusters
 import Statistics.Clustering.KMeans.Tools
@@ -10,14 +12,11 @@ import qualified Data.List as L
 -- from the package mersenne-random-pure64
 import System.Random.Mersenne.Pure64
 
--- from the package normaldistribution
-import Data.Random.Normal
-
 -- from random-shuffle
 import System.Random.Shuffle
 
 -- from lens, provides the TraversableWithIndex class
-import Control.Lens.WithIndex
+-- import Control.Lens.WithIndex
 
 
 makeTestSet :: IO ([FVec3],Int,[FVec3])
@@ -49,7 +48,7 @@ testScript = do
   -- let naiveInitialClusters = take actualNumClusters shuffledPts
       
   let initialClusters = pickInitialCenters actualNumClusters shuffledPts
-      initialClusters' = fmap toAccum initialClusters
+      initialClusters' = (fmap toPointVec initialClusters) :: [DVec3]
       determinedClusters100 = KMeans.kMeans shuffledPts initialClusters'
 
   dumpCSV2 (L.sort determinedClusters100) "estimatedCenters.csv"

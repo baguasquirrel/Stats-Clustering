@@ -1,5 +1,6 @@
 module Statistics.Clustering.KMeans.Tools where
 
+import Statistics.Types.PointVec
 import Statistics.Datasets.Clusters
 
 import qualified Data.Foldable as Fl
@@ -7,7 +8,7 @@ import qualified Data.Traversable as Tv
 
 
 
-pickInitialCenters :: (Tv.Traversable c, Vector v d, Ord d)
+pickInitialCenters :: (Tv.Traversable c, PointVec v d, Ord d)
                    => Int
                    -> c v
                    -> [v]
@@ -37,3 +38,5 @@ pickInitialCenters k cs =
           case minDist' < minDist of
             True -> (v,minDist)
             False -> (v',minDist')
+
+

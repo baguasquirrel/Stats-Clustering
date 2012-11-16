@@ -2,13 +2,14 @@
 
 module Statistics.Datasets.SampleVectorDefinitions where
 
+import Statistics.Types.Debug
+import Statistics.Types.PointVec
+import Statistics.Distributions.Gaussian
 import Statistics.Datasets.Clusters
+
 import GHC.Float
 import System.Random
 
--- from the package normaldistribution
---import qualified Data.Random.Normal as N
-import Statistics.Distributions.Gaussian
 
 
 data FVec3 =
@@ -50,7 +51,7 @@ instance Random FVec3 where
       (n3,g3) = random g2
 
 
-instance Vector FVec3 Float where
+instance PointVec FVec3 Float where
   addVectors (FVec3 x1 y1 z1) (FVec3 x2 y2 z2) =
     FVec3 (x1+x2) (y1+y2) (z1+z2)
 
@@ -74,7 +75,7 @@ instance Vector FVec3 Float where
 
 
 
-instance Vector DVec3 Double where
+instance PointVec DVec3 Double where
   addVectors (DVec3 x1 y1 z1) (DVec3 x2 y2 z2) =
     DVec3 (x1+x2) (y1+y2) (z1+z2)
 
@@ -114,9 +115,8 @@ instance Random DVec3 where
       (n3,g3) = random g2
 
 
-instance AccumVec FVec3 Float DVec3 Double where
-  toAccum (FVec3 x y z) = DVec3 (float2Double x) (float2Double y) (float2Double z)
-  toAccumD = float2Double
+instance ToPointVec FVec3 DVec3 Double where
+  toPointVec (FVec3 x y z) = DVec3 (float2Double x) (float2Double y) (float2Double z)
 
 
 instance CSV_Output FVec3 where

@@ -1,12 +1,7 @@
 {-# LANGUAGE FunctionalDependencies #-}
 
 module Statistics.Datasets.Clusters 
-  ( Vector(..)
-  , AccumVec(..)
-  , CSV_Output(..)
-  , dumpCSV
-  , dumpCSV2
-  , clusters
+  ( clusters
   , clusters'
   ) where
 
@@ -15,53 +10,12 @@ import qualified Data.List as L
 import qualified Data.Traversable as Tv
 import qualified Data.Vector as V
 
+import Statistics.Types.Debug
+import Statistics.Types.PointVec
 import Statistics.Distributions.Gaussian
 
-import System.IO
 
 
-class Vector ptTy distTy | ptTy -> distTy where
-  euclideanDistance :: ptTy -> ptTy -> distTy
-  euclideanDistance a b = norm $ diffVectors a b
-
-  addVectors :: ptTy -> ptTy -> ptTy
-  diffVectors :: ptTy -> ptTy -> ptTy
-
-  norm :: ptTy -> distTy
-  norm2 :: ptTy -> distTy
-
-  scale :: distTy -> ptTy -> ptTy
-
-  unitVector :: ptTy
-  zeroVector :: ptTy
-
-
-
-
-
-class (Vector v d, Vector acc d_acc) => AccumVec v d acc d_acc | v -> acc, v -> d, d -> d_acc where
-  toAccum :: v -> acc
-  toAccumD :: d -> d_acc
-
-
-
-
-
-
-class CSV_Output a where
-  toCSV :: a -> String  
-
-dumpCSV :: (CSV_Output a, Tv.Traversable t) => t a -> FilePath -> IO ()
-dumpCSV cs fp =
-  do h <- openFile fp WriteMode
-     Tv.mapM (\c -> hPutStrLn h (toCSV c)) cs
-     hClose h
-
-dumpCSV2 :: (CSV_Output a) => [a] -> FilePath -> IO ()
-dumpCSV2 cs fp =
-  do h <- openFile fp WriteMode
-     mapM_ (\c -> hPutStrLn h (toCSV c)) cs
-     hClose h
 
 
 
@@ -70,32 +24,9 @@ randomRgs bounds g =
   (\(v,g') -> (v,g') : randomRgs bounds g') (randomR bounds g)
 
 
-{-
-class RandomGaussian v where
-  normal :: (RandomGen g) => g -> (v, g)
-
-  normals :: (RandomGen g) => g -> [v]
-  normals g = (\(x,g') -> x : normals g') (normal g)
-
-  normalD :: (RandomGen g, Vector v d) => (v,d) -> g -> (v, g)
-  normalD (v,d) g =
-    (v'',g')
-    where
-      (v',g') = normal g
-      v'' = addVectors v $ scale v' d
-
-  normalDs :: (RandomGen g, Vector v d) => (v,d) -> g -> [v]
-  normalDs vd g = (\(x,g') -> x : normalDs vd g') (normalD vd g)
-
-  normalDgs :: (RandomGen g, Vector v d) => (v,d) -> g -> [(v,g)]
-  normalDgs vd g = (\(x,g') -> (x,g') : normalDgs vd g') (normalD vd g)
--}
 
 
-
-
-
-clusters :: (RandomGen g, Vector v d, Random v, UniformGaussianValues v d, Num d, Ord d)
+clusters :: (RandomGen g, PointVec v d, Random v, UniformGaussianValues v d, Num d, Ord d)
          => (v,v)  -- ^ the (lower,upper) corners of the bounding box where we want our clusters
          -> d      -- ^ the standard deviation of our clusters
          -> d      -- ^ padding space between clusters
@@ -114,7 +45,7 @@ clusters bounds stddev padding nclusters pointsPerCluster g =
 
 
 
-clusters' :: (RandomGen g, Vector v d, Random v, UniformGaussianValues v d, Num d, Ord d)
+clusters' :: (RandomGen g, PointVec v d, Random v, UniformGaussianValues v d, Num d, Ord d)
           => d      -- ^ the standard deviation of our clusters
           -> Int    -- ^ number of clusters we desire. the actual number of clusters may be smaller, but always greater than zero
           -> [v]    -- ^ the cluster centers
@@ -137,7 +68,7 @@ clusters' stddev pointsPerCluster cs g =
 
 
 
-createClusterCenters :: (RandomGen g, Vector v d, Random v, Num d, Ord d)
+createClusterCenters :: (RandomGen g, PointVec v d, Random v, Num d, Ord d)
                      => (v,v) -- ^ bounds
                      -> d     -- ^ padding
                      -> Int   -- ^ number of clusters

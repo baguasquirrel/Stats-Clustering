@@ -1,12 +1,28 @@
 {-# LANGUAGE FunctionalDependencies #-}
 
 module Statistics.Types.PointVec where
+  
 
 class PointVec ptTy distTy | ptTy -> distTy where
-  dimension :: ptTy -> Int
-  valueAt :: ptTy -> Int -> unitsTy
-
   euclideanDistance :: ptTy -> ptTy -> distTy
+  euclideanDistance a b = norm $ diffVectors a b
+
+  addVectors :: ptTy -> ptTy -> ptTy
+  diffVectors :: ptTy -> ptTy -> ptTy
+
+  norm :: ptTy -> distTy
+  norm2 :: ptTy -> distTy
+
+  scale :: distTy -> ptTy -> ptTy
+
+  unitVector :: ptTy
+  zeroVector :: ptTy
+
+
+class (PointVec acc d_acc) => ToPointVec v acc d_acc | v -> acc where
+  toPointVec :: v -> acc
+
+
 
 {-
 class PointVec ptTy unitsTy distTy | ptTy -> distTy, ptTy -> unitsTy where
