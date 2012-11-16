@@ -3,7 +3,6 @@
 module Statistics.Clustering.KMeans.SpaceOpt (kMeans, statsForResults) where
 
 import Statistics.Types.PointVec
-import Statistics.Datasets.Clusters
 
 import qualified Data.List as L
 import qualified Data.Map as M
