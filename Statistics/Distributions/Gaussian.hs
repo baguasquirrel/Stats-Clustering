@@ -1,4 +1,6 @@
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Statistics.Distributions.Gaussian
   ( pdf
@@ -7,16 +9,22 @@ module Statistics.Distributions.Gaussian
   , nonnormalized_inverse_pdf
   , erfc
   , zigTable
+  , zigTableFloats, wordToFloating
   , ziggurat
   , UniformGaussianValues(..)
   , histogram
+
   ) where
 
 import qualified Data.Vector as V
+import qualified Data.Vector.Unboxed as VU
 import qualified System.Random as R
 import qualified Data.Foldable as Fl
 import qualified Data.IntMap as IM
+import Data.Word
+import Data.Bits
 
+import System.IO.Unsafe
 
 
 -- ^ calculate the gaussian pdf function at some position x
@@ -40,7 +48,7 @@ std_pdf x =
     b = exp $ (-0.5 * x * x)
     a = (sqrt $ 2 * pi)
 
-
+{-# INLINABLE nonnormalized_pdf #-}
 nonnormalized_pdf :: (Floating a)
                   => a
                   -> a
@@ -49,6 +57,7 @@ nonnormalized_pdf x = exp (-0.5 * x * x)
 area_of_tail_pdf :: (Floating a) => a -> a
 area_of_tail_pdf x = (sqrt (pi * 0.5)) * (erfc (x * 0.7071067811865475))
 
+{-# INLINABLE nonnormalized_inverse_pdf #-}
 nonnormalized_inverse_pdf :: (Floating a) => a -> a
 nonnormalized_inverse_pdf y = sqrt (-2.0 * log y)
 
@@ -72,84 +81,136 @@ erfc x =
 
 
 --
+{-# INLINE zigTableSize #-}
+zigTableSize = 0x80
+{-# INLINE zigTableMask #-}
+zigTableMask = 0x7F
 
-zigTableSize = 128
+{-# INLINE gaussian_zigX1 #-}
+gaussian_zigX1 :: (Floating a) => a
+gaussian_zigX1 = 3.442619855899
 
-zigX0 :: (Floating a) => a
-zigX0 = 3.442619855899
+{-# INLINE gaussian_zigA #-}
+gaussian_zigA :: (Floating a) => a
+gaussian_zigA = 9.91256303526217e-3
 
-zigA :: (Floating a) => a
-zigA = 9.91256303526217e-3
+{-# INLINE gaussian_zigADivY0 #-}
+gaussian_zigADivY0 :: (Floating a) => a
+gaussian_zigADivY0 = gaussian_zigA / nonnormalized_pdf gaussian_zigX1
 
-zigTable :: (Floating a) => V.Vector (a,a)
-zigTable =
-  (V.fromList $ (take zigTableSize zigList) ++ [(0.0, 1.0)])
+zigTable :: (RealFrac a, Floating a)
+         => a
+         -> a
+         -> ((a -> a), (a -> a))
+         -> (V.Vector a, V.Vector a, V.Vector Word)
+{-# SPECIALISE INLINE zigTable :: Float -> Float -> ((Float -> Float), (Float -> Float)) -> (V.Vector Float, V.Vector Float, V.Vector Word) #-}
+zigTable zigX1 zigA (pdf, invpdf) =
+  (V.fromList xs, V.fromList ys, V.fromList $ xw0 : g (tail zigList))
   where
-    zigList = (initX0, initY0) : (initX1, initY1) : f (initX1, initY1)
-    initX0 = zigX0
-    initY0 = nonnormalized_pdf zigX0
-    initX1 = initX0
-    initY1 = initY0 + zigA / initX1
+    (xs, ys) = unzip zigList
+    zigList = (take zigTableSize zigList') ++ [(0, pdf 0)]
+    zigList' = (x0, y0) : (x1, y1) : f (x1, y1)
+
+    x0 = zigX1
+    y0 = pdf zigX1
+    xw0 = round $ ((zigX1 * y0) / zigA) * (fromIntegral (maxBound :: Word))
+
+    x1 = zigX1
+    y1 = y0 + zigA / x1
+
+    g ((x_i,y_i) : (x_ip1,y_ip1) : zs) = (round $ (x_ip1 / x_i) * (fromIntegral (maxBound :: Word))) : (g ((x_ip1,y_ip1) : zs))
+    g _ = []
 
     f (x_p, y_p) =
       p_c : (f p_c)
       where
         p_c = (x_c, y_c)
-        x_c = nonnormalized_inverse_pdf y_p
+        x_c = invpdf y_p
         y_c = y_p + zigA / x_c
 
-zigTableFloats :: V.Vector (Float,Float)
-zigTableFloats = zigTable
+zigTableFloats :: (V.Vector Float, V.Vector Float, V.Vector Word)
+zigTableFloats = zigTable gaussian_zigX1 gaussian_zigA (nonnormalized_pdf, nonnormalized_inverse_pdf)
 
-zigTableDoubles :: V.Vector (Double,Double)
-zigTableDoubles = zigTable
+zigTableDoubles :: (V.Vector Double, V.Vector Double, V.Vector Word)
+zigTableDoubles = zigTable gaussian_zigX1 gaussian_zigA (nonnormalized_pdf, nonnormalized_inverse_pdf)
 
-ziggurat :: (Floating p, Ord p, R.Random p, R.RandomGen g)
-         => V.Vector (p,p)
+{-# SPECIALISE INLINE wordToFloating :: Word -> Float #-}
+{-# SPECIALISE INLINE wordToFloating :: Word -> Double #-}
+wordToFloating :: (Floating p) => Word -> p
+wordToFloating w = (fromIntegral w) * wordToFloatingInv
+
+{-# SPECIALISE INLINE wordToFloatingInv :: Float #-}
+{-# SPECIALISE INLINE wordToFloatingInv :: Double #-}
+wordToFloatingInv :: (Floating p) => p
+wordToFloatingInv = 1.0 / (fromIntegral (maxBound :: Word))
+
+
+{-# SPECIALISE INLINE ziggurat :: (R.RandomGen g) => (V.Vector Float, V.Vector Float, V.Vector Word) -> g -> (Float,g) #-}
+{-# SPECIALISE INLINE ziggurat :: (R.RandomGen g) => (V.Vector Double, V.Vector Double, V.Vector Word) -> g -> (Double,g) #-}
+{-# INLINE ziggurat #-}
+ziggurat :: (Floating p, Ord p, R.Random p, Show p, R.RandomGen g)
+         => (V.Vector p, V.Vector p, V.Vector Word)
          -> g
          -> (p,g)
-ziggurat table g0 =
-  checkXStep
+ziggurat (tableX, tableY, tableXW) g0 =
+  checkBottomLayer
   where
     -- choose random layer
-    (l,g1) = R.randomR (0,zigTableSize-1) g0
-    (x_l,y_l) = table V.! l
-    (x_l_plus1,y_l_plus1) = table V.! (l+1)
+    ((!u1) :: Word, !g1) = R.random g0
+    !l = fromIntegral $ u1 .&. zigTableMask
+    !sign = 
+      case (u1 .&. 0x80) == 0 of
+        True ->  -1.0
+        False ->  1.0
 
-    -- choose X
-    (u0,g2) = R.randomR (-1,1) g1
-    x = u0 * x_l
+    ((!u2) :: Word, !g2) = R.random g1
 
-    -- does x fall inside the rectangle?
+    {-# INLINE checkBottomLayer #-}
+    checkBottomLayer =
+      case l == 0 of
+        False -> checkXStep
+        True ->
+          case u2 < tableXW V.! 0 of
+            False -> fallbackToTail g2
+            True ->
+              (x,g2)
+              where
+                x = (wordToFloating u2) * gaussian_zigADivY0 * sign
+
+
+    !x = (wordToFloating u2) * (tableX V.! l)
+
+    {-# INLINE checkXStep #-}
     checkXStep =
-      case abs x < x_l_plus1 of
-        True -> (x,g2)
-        False ->
-          case l == 0 of
-            True -> fallbackToTailStep g2
-            False -> checkYStep
+      case u2 < tableXW V.! l of
+        True -> 
+          (x * sign, g2)
 
-    -- x did not fall outside the rectangle, and it was
-    -- not the bottom layer.
-    checkYStep =
-      let (u1,g3) = R.randomR (0,1) g2
-          y = y_l + u1 * (y_l_plus1 - y_l)
-      in
-      case y < nonnormalized_pdf x of
-        True -> (x,g3)
-        False -> ziggurat table g3
-      
-    -- x did not fall outside the rectangle, and we are
-    -- in the bottom layer, i.e. the tail
-    fallbackToTailStep g0 =
-      let (u0,g1) = R.randomR (0,1) g0
-          (u1,g2) = R.randomR (0,1) g1
-          x = (-(log u0)) / zigX0
+        False ->
+          checkYStep
+
+    fallbackToTail gA =
+      let x = -(log u0) / gaussian_zigX1
           y = -(log u1)
+          (u0,gB) = R.random gA
+          (u1,gC) = R.random gB
       in
-      case 2 * y > x * x of
-        True -> (x + zigX0, g2)
-        False -> fallbackToTailStep g2
+      case y + y > x * x of
+        True -> ((sign * (x + gaussian_zigX1)), gC)
+        False -> fallbackToTail gC
+
+
+    {-# INLINE checkYStep #-}
+    checkYStep =
+      let (d3,g3) = R.random g2
+          y_lm1 = tableY V.! (l-1)
+          y_l =   tableY V.! l
+      in
+      case y_lm1 + ((y_l - y_lm1) * d3) < nonnormalized_pdf x of
+        True -> (x * sign, g3)
+        False -> ziggurat (tableX, tableY, tableXW) g3
+
+
 
 
 histogram :: (Fl.Foldable f, RealFrac a)
@@ -162,12 +223,12 @@ histogram nbuckets (lo,hi) samples =
   where
     initCounts = IM.fromList $ take nbuckets $ zip [0,1..] (repeat 0)
 
-    tallySample counts x =
+    tallySample !counts !x =
       IM.adjust (\c -> c+1) k counts
       where
         k = sampleToBucket x
 
-    sampleToBucket x =
+    sampleToBucket !x =
       case x < lo of
         True -> 0
         False ->
