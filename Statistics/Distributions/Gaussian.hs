@@ -104,6 +104,7 @@ zigTable :: (RealFrac a, Floating a)
          -> ((a -> a), (a -> a))
          -> (V.Vector a, V.Vector a, V.Vector Word)
 {-# SPECIALISE INLINE zigTable :: Float -> Float -> ((Float -> Float), (Float -> Float)) -> (V.Vector Float, V.Vector Float, V.Vector Word) #-}
+{-# SPECIALISE INLINE zigTable :: Double -> Double -> ((Double -> Double), (Double -> Double)) -> (V.Vector Double, V.Vector Double, V.Vector Word) #-}
 zigTable zigX1 zigA (pdf, invpdf) =
   (V.fromList xs, V.fromList ys, V.fromList $ xw0 : g (tail zigList))
   where
@@ -127,6 +128,11 @@ zigTable zigX1 zigA (pdf, invpdf) =
         p_c = (x_c, y_c)
         x_c = invpdf y_p
         y_c = y_p + zigA / x_c
+
+{-# SPECIALISE zigTableGaussian :: (V.Vector Float, V.Vector Float, V.Vector Word) #-}
+{-# SPECIALISE zigTableGaussian :: (V.Vector Double, V.Vector Double, V.Vector Word) #-}
+zigTableGaussian :: (RealFrac p, Floating p) => (V.Vector p, V.Vector p, V.Vector Word)
+zigTableGaussian = zigTable gaussian_zigX1 gaussian_zigA (nonnormalized_pdf, nonnormalized_inverse_pdf)
 
 zigTableFloats :: (V.Vector Float, V.Vector Float, V.Vector Word)
 zigTableFloats = zigTable gaussian_zigX1 gaussian_zigA (nonnormalized_pdf, nonnormalized_inverse_pdf)
@@ -152,7 +158,7 @@ ziggurat :: (Floating p, Ord p, R.Random p, Show p, R.RandomGen g)
          => (V.Vector p, V.Vector p, V.Vector Word)
          -> g
          -> (p,g)
-ziggurat (tableX, tableY, tableXW) g0 =
+ziggurat (tableX, tableY, tableXW) !g0 =
   checkBottomLayer
   where
     -- choose random layer
@@ -170,44 +176,47 @@ ziggurat (tableX, tableY, tableXW) g0 =
       case l == 0 of
         False -> checkXStep
         True ->
-          case u2 < tableXW V.! 0 of
+          case u2 < tableXW `V.unsafeIndex` 0 of
             False -> fallbackToTail g2
             True ->
-              (x,g2)
+              (x',g2)
               where
-                x = (wordToFloating u2) * gaussian_zigADivY0 * sign
+                !x' = (wordToFloating u2) * gaussian_zigADivY0 * sign
 
 
-    !x = (wordToFloating u2) * (tableX V.! l)
+    x = (wordToFloating u2) * (tableX `V.unsafeIndex` l)
 
     {-# INLINE checkXStep #-}
     checkXStep =
-      case u2 < tableXW V.! l of
+      case u2 < tableXW `V.unsafeIndex` l of
         True -> 
-          (x * sign, g2)
+          (x', g2)  where !x' = x * sign
 
         False ->
           checkYStep
 
-    fallbackToTail gA =
+    fallbackToTail !gA =
       let x = -(log u0) / gaussian_zigX1
           y = -(log u1)
-          (u0,gB) = R.random gA
-          (u1,gC) = R.random gB
+          (u0,!gB) = R.random gA
+          (u1,!gC) = R.random gB
       in
       case y + y > x * x of
-        True -> ((sign * (x + gaussian_zigX1)), gC)
+        True -> (x', gC)
+          where
+            !x' = sign * (x + gaussian_zigX1)
+
         False -> fallbackToTail gC
 
 
     {-# INLINE checkYStep #-}
     checkYStep =
-      let (d3,g3) = R.random g2
-          y_lm1 = tableY V.! (l-1)
-          y_l =   tableY V.! l
+      let (!d3,!g3) = R.random g2
+          !y_lm1 = tableY `V.unsafeIndex` (l-1)
+          !y_l =   tableY `V.unsafeIndex` l
       in
       case y_lm1 + ((y_l - y_lm1) * d3) < nonnormalized_pdf x of
-        True -> (x * sign, g3)
+        True -> (x', g3)  where !x' = x * sign
         False -> ziggurat (tableX, tableY, tableXW) g3
 
 
@@ -266,20 +275,20 @@ class UniformGaussianValues p v | p -> v where
 
 
 instance UniformGaussianValues Float Float where
-  normal g = ziggurat zigTableFloats g
+  normal g = ziggurat zigTableGaussian g
 
   normalD (m,v) g =
     (p', g')
     where
       p' = m + p * v
-      (p,g') = ziggurat zigTableFloats g
+      (p,g') = ziggurat zigTableGaussian g
 
 -- identical to the float case
 instance UniformGaussianValues Double Double where
-  normal g = ziggurat zigTableDoubles g
+  normal g = ziggurat zigTableGaussian g
 
   normalD (m,v) g =
     (p', g')
     where
       p' = m + p * v
-      (p,g') = ziggurat zigTableDoubles g
+      (p,g') = ziggurat zigTableGaussian g
